@@ -1,0 +1,7 @@
+household_power_consumption.txt
+train_model.py
+generate_demo_model.py
+__pycache__/
+*.pyc
+.env
+*.log

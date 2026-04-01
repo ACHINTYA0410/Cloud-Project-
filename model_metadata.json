@@ -1,0 +1,35 @@
+{
+  "model_type": "Isolation Forest",
+  "contamination": 0.01,
+  "n_estimators": 100,
+  "random_state": 42,
+  "features": [
+    "Global_active_power",
+    "Global_reactive_power",
+    "Voltage",
+    "Global_intensity",
+    "Sub_metering_1",
+    "Sub_metering_2",
+    "Sub_metering_3"
+  ],
+  "total_records_trained": 2049280,
+  "training_date": "2026-04-02 01:09:25",
+  "feature_means": {
+    "Global_active_power": 1.091615,
+    "Global_reactive_power": 0.123714,
+    "Voltage": 240.839858,
+    "Global_intensity": 4.627759,
+    "Sub_metering_1": 1.121923,
+    "Sub_metering_2": 1.29852,
+    "Sub_metering_3": 6.458447
+  },
+  "feature_stds": {
+    "Global_active_power": 1.057294,
+    "Global_reactive_power": 0.112722,
+    "Voltage": 3.239987,
+    "Global_intensity": 4.444396,
+    "Sub_metering_1": 6.153031,
+    "Sub_metering_2": 5.822026,
+    "Sub_metering_3": 8.437154
+  }
+}
