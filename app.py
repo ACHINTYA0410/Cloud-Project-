@@ -96,13 +96,13 @@ def supabase_insert(rows: list[dict]) -> list:
         return []
 
 
-def supabase_query(filters: str = "", limit: int = 100) -> list:
+def supabase_query(filters: str = "", limit: int = 100, offset: int = 0) -> list:
     if not _supabase_ready():
         return []
     try:
         url  = (
             f"{SUPABASE_URL}/rest/v1/predictions"
-            f"?order=timestamp.desc&limit={limit}{filters}"
+            f"?order=timestamp.desc&limit={limit}&offset={offset}{filters}"
         )
         resp = http_requests.get(url, headers=_get_headers(), timeout=10)
         return resp.json() if resp.ok else []
@@ -126,6 +126,44 @@ def supabase_count(filter_anomaly=None) -> int:
     except Exception as e:
         print(f"[Supabase] ❌ Count error: {e}")
         return 0
+
+
+def classify_deviation(is_anomaly: bool, score: float) -> dict:
+    """
+    Technical triage labels for model outputs.
+    - inlier
+    - borderline_outlier
+    - moderate_outlier
+    - critical_outlier
+    """
+    if not is_anomaly:
+        return {
+            "anomaly_class": "inlier",
+            "anomaly_severity": "none",
+            "risk_index": 0.0,
+        }
+
+    model_offset = float(getattr(_model, "offset_", -0.5))
+    margin = max(0.0, model_offset - float(score))
+
+    if margin >= 0.060:
+        anomaly_class = "critical_outlier"
+        anomaly_severity = "high"
+    elif margin >= 0.025:
+        anomaly_class = "moderate_outlier"
+        anomaly_severity = "medium"
+    else:
+        anomaly_class = "borderline_outlier"
+        anomaly_severity = "low"
+
+    # 0..1 risk index from model-distance to decision boundary
+    risk_index = min(1.0, round(margin / 0.1, 4))
+
+    return {
+        "anomaly_class": anomaly_class,
+        "anomaly_severity": anomaly_severity,
+        "risk_index": risk_index,
+    }
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -158,6 +196,7 @@ def predict():
     for i, (pred, score, reading) in enumerate(zip(preds, scores, readings)):
         is_anomaly = bool(pred == -1)
         timestamp  = datetime.now(timezone.utc).isoformat()
+        triage = classify_deviation(is_anomaly, float(score))
 
         # Column names must match Supabase table exactly (all lowercase_underscore)
         row = {
@@ -179,6 +218,7 @@ def predict():
             "timestamp": timestamp,
             "anomaly":   is_anomaly,
             "score":     float(score),
+            **triage,
             "readings":  {k: float(reading[j]) for j, k in enumerate(FEATURES)},
         })
 
@@ -191,11 +231,29 @@ def predict():
 
 @app.route("/history", methods=["GET"])
 def history():
-    limit          = int(request.args.get("limit", 100))
+    page_size      = int(request.args.get("page_size", request.args.get("limit", 100)))
+    page           = int(request.args.get("page", 1))
     anomalies_only = request.args.get("anomalies_only", "false").lower() == "true"
+    page_size      = max(1, min(page_size, 500))
+    page           = max(1, page)
+    offset         = (page - 1) * page_size
     filters        = "&is_anomaly=eq.true" if anomalies_only else ""
-    rows           = supabase_query(filters=filters, limit=limit)
-    return jsonify(rows)
+    rows           = supabase_query(filters=filters, limit=page_size, offset=offset)
+    total          = supabase_count(filter_anomaly=True) if anomalies_only else supabase_count()
+
+    enriched_rows = []
+    for row in rows:
+        triage = classify_deviation(bool(row.get("is_anomaly")), float(row.get("anomaly_score", 0.0)))
+        enriched_rows.append({**row, **triage})
+
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+    return jsonify({
+        "rows": enriched_rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    })
 
 
 @app.route("/stats", methods=["GET"])
