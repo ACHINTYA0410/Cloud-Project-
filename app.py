@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers=["Content-Type", "ngrok-skip-browser-warning"])
 
 # ── Feature names (must match Supabase column names exactly) ───────────────────
 FEATURES = [
